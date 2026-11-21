@@ -1,0 +1,28 @@
+# Dependências
+node_modules/
+
+# Variáveis de ambiente e segredos
+.env
+.env.*
+!.env.example
+
+# Arquivos gerados pelo Prisma
+backend/generated/
+
+# Arquivos de build
+dist/
+build/
+coverage/
+
+# Logs
+*.log
+
+# Arquivos do sistema
+.DS_Store
+Thumbs.db
+
+# Configurações auxiliares de ferramentas
+.agents/
+.claude/
+.windsurf/
+skills-lock.json
