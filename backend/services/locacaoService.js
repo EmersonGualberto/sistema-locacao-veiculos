@@ -118,7 +118,16 @@ async function finalizarLocacaoService(locacaoId, usuarioId) {
 
         if (locacao.status !== 'ATIVA') {
             throw criarErro('Esta locação já foi finalizada.', 409);
-        }
+        } 
+         
+        const agora = new Date()
+
+        if (agora < locacao.dataInicio) {
+    throw criarErro(
+        'Não é possível finalizar uma locação antes da data de início.',
+        409
+    );
+}
 
         const atualizacaoLocacao = await transacao.locacao.updateMany({
             where: {
@@ -128,7 +137,7 @@ async function finalizarLocacaoService(locacaoId, usuarioId) {
             },
             data: {
                 status: 'FINALIZADA',
-                dataDevolucao: new Date()
+                dataDevolucao: agora
             }
         });
 
