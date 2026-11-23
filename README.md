@@ -107,24 +107,37 @@ sistema-locacao-veiculos/
 
 ## Pré-requisitos
 
-Para executar o projeto localmente, é necessário ter instalado:
+Para executar o projeto em outra máquina, é necessário:
 
-- Node.js e npm.
-- MySQL Server.
-- Git.
+- Git
+- Node.js e npm (recomendado Node.js 26, versão utilizada no desenvolvimento)
+- MySQL Server 8
+- Um terminal para o backend e outro para o frontend
 
-Também é necessário configurar um banco de dados MySQL e um usuário com permissões adequadas para executar as migrações.
+O projeto foi desenvolvido e testado no Pop!_OS. Os comandos de instalação do MySQL apresentados abaixo são destinados ao Ubuntu/Pop!_OS. Em outros sistemas operacionais, a instalação e o acesso administrativo ao MySQL podem ser diferentes.
 
-## Instalação
+## Instalação e execução
 
-### 1. Clonar o repositório
+### 1. Clonar o projeto
 
 ```bash
 git clone https://github.com/EmersonGualberto/sistema-locacao-veiculos.git
 cd sistema-locacao-veiculos
 ```
 
-### 2. Preparar o banco de dados
+### 2. Configurar o MySQL
+
+No Ubuntu/Pop!_OS, verifique se o MySQL está funcionando:
+
+```bash
+sudo systemctl status mysql
+```
+
+Se necessário, inicie o serviço:
+
+```bash
+sudo systemctl start mysql
+```
 
 Acesse o MySQL com uma conta administrativa:
 
@@ -132,82 +145,79 @@ Acesse o MySQL com uma conta administrativa:
 sudo mysql
 ```
 
-Crie o banco de dados:
+Crie o banco de dados e um usuário para a aplicação:
 
 ```sql
 CREATE DATABASE IF NOT EXISTS locacao_veiculos;
-```
 
-Crie um usuário específico para a aplicação, substituindo a senha de exemplo por uma senha própria:
-
-```sql
 CREATE USER IF NOT EXISTS 'locacao_app'@'localhost'
 IDENTIFIED BY 'SENHA_FORTE_AQUI';
 
 GRANT ALL PRIVILEGES ON locacao_veiculos.*
 TO 'locacao_app'@'localhost';
 
-FLUSH PRIVILEGES;
-```
-
-Saia do MySQL:
-
-```sql
 EXIT;
 ```
 
-O usuário utilizado nas migrações precisa ter permissões suficientes para o Prisma criar e modificar as tabelas. O comando `prisma migrate dev` também utiliza um banco temporário (shadow database), podendo exigir permissões adicionais de criação e exclusão de bancos no ambiente de desenvolvimento.
+Substitua `SENHA_FORTE_AQUI` por uma senha própria. Caso o usuário já exista, o comando `CREATE USER IF NOT EXISTS` não altera sua senha.
 
-### 3. Configurar o backend
+O comando `prisma migrate deploy`, utilizado neste projeto, aplica as migrações existentes e não exige a criação de um shadow database. Para desenvolver novas migrações com `prisma migrate dev`, podem ser necessárias permissões adicionais.
 
-Entre na pasta:
+### 3. Instalar as dependências do backend
+
+Na raiz do projeto:
 
 ```bash
 cd backend
-```
-
-Instale as dependências:
-
-```bash
 npm ci
 ```
 
-Crie o arquivo de configuração a partir do exemplo:
+### 4. Configurar as variáveis de ambiente do backend
+
+Crie o arquivo `.env`:
 
 ```bash
 cp .env.example .env
 ```
 
-Configure o arquivo `.env`:
+Edite o arquivo e configure:
 
 ```env
-DATABASE_URL="mysql://locacao_app:SENHA_FORTE_AQUI@localhost:3306/locacao_veiculos"
+DATABASE_URL="mysql://locacao_app:SENHA_FORTE_AQUI@127.0.0.1:3306/locacao_veiculos"
 JWT_SECRET="SUBSTITUA_POR_UM_SEGREDO_LONGO_E_ALEATORIO"
+PORT=3000
+FRONTEND_URL="http://localhost:5173"
 ```
 
-Substitua os valores de exemplo pelas credenciais configuradas no MySQL e por um segredo JWT próprio.
+**Descrição das variáveis:**
 
-Se a senha do banco contiver caracteres especiais, eles devem ser codificados adequadamente na URL de conexão.
+| Variável | Finalidade |
+|---|---|
+| `DATABASE_URL` | Endereço, usuário, senha e nome do banco MySQL |
+| `JWT_SECRET` | Segredo utilizado para assinar e validar tokens JWT |
+| `PORT` | Porta utilizada pelo backend |
+| `FRONTEND_URL` | Origem do frontend autorizada pelo CORS |
+
+O adaptador Prisma utiliza o host definido em `DATABASE_URL`, permitindo configurar outro servidor MySQL sem modificar o código.
+
+Se a senha do banco contiver caracteres especiais, eles precisam ser codificados para uso na URL. Por exemplo, `@` deve ser representado por `%40`.
 
 O arquivo `.env` contém informações sensíveis e não deve ser enviado ao GitHub.
 
-### 4. Preparar o Prisma
+### 5. Gerar o Prisma Client e aplicar as migrações
 
-Gere o Prisma Client:
+Ainda na pasta `backend`, execute:
 
 ```bash
 npx prisma generate
-```
-
-Aplique as migrações existentes:
-
-```bash
 npx prisma migrate deploy
 ```
 
-As migrações criam as tabelas e relacionamentos definidos no arquivo `prisma/schema.prisma`.
+O primeiro comando gera o Prisma Client utilizado pela aplicação.
 
-### 5. Preparar os dados de demonstração
+O segundo aplica as migrações versionadas no repositório, criando as tabelas `Usuario`, `Veiculo` e `Locacao` em um banco novo.
+
+### 6. Preparar os dados de demonstração
 
 Execute:
 
@@ -215,43 +225,97 @@ Execute:
 npm run seed
 ```
 
-Esse comando cadastra um usuário de demonstração e cinco veículos.
+O seed prepara um usuário de demonstração e cinco veículos.
 
-O seed utiliza `upsert`, permitindo executar novamente a preparação sem duplicar os registros identificados pelo e-mail ou pela placa.
+Ele utiliza `upsert`, evitando a duplicação desses registros quando executado novamente. O comando não apaga o histórico de locações.
 
-### 6. Iniciar o backend
+### 7. Iniciar o backend
 
-Na pasta `backend`, execute:
+Execute:
 
 ```bash
 node index.js
 ```
 
-A API será iniciada em:
+Com a configuração padrão, o backend estará disponível em:
 
-```text
 http://localhost:3000
-```
 
 Mantenha esse terminal aberto.
 
-### 7. Configurar e iniciar o frontend
+### 8. Instalar e configurar o frontend
 
 Abra outro terminal e, a partir da raiz do projeto, execute:
 
 ```bash
 cd frontend
 npm ci
+```
+
+Crie o arquivo de ambiente do frontend:
+
+```bash
+cp .env.example .env
+```
+
+O conteúdo padrão é:
+
+```env
+VITE_API_URL="http://localhost:3000"
+```
+
+Essa variável define o endereço utilizado pelo frontend para acessar a API.
+
+Se o backend estiver em outro endereço ou porta, atualize `VITE_API_URL` de acordo com o ambiente. Reinicie o Vite após alterar o arquivo `.env`.
+
+As variáveis `VITE_` ficam disponíveis no código do navegador e não devem conter senhas ou segredos.
+
+### 9. Iniciar o frontend
+
+Execute:
+
+```bash
 npm run dev
 ```
 
-Acesse o endereço exibido pelo Vite, normalmente:
+Com a configuração padrão, acesse:
 
-```text
 http://localhost:5173
-```
 
-O frontend se comunica com a API executada em `http://localhost:3000`.
+A tela de login será exibida. Utilize as credenciais da seção **Dados de demonstração**.
+
+### 10. Verificar a instalação
+
+Após iniciar o backend e o frontend:
+
+1. Faça login com o usuário de demonstração.
+2. Confira se os cinco veículos cadastrados pelo seed aparecem.
+3. Registre uma locação para um veículo disponível.
+4. Verifique se o veículo passa a ficar indisponível.
+5. Finalize a locação e confirme se o veículo volta a ficar disponível.
+6. Confira o histórico de locações.
+
+### Problemas comuns
+
+**Erro de conexão com o MySQL**
+
+Verifique se o serviço MySQL está em execução, se o banco foi criado e se as credenciais de `DATABASE_URL` estão corretas.
+
+**Erro ao executar o Prisma**
+
+Execute `npx prisma generate` e confirme se as migrações foram aplicadas com `npx prisma migrate deploy`.
+
+**Erro de CORS**
+
+Confira se `FRONTEND_URL` no backend corresponde exatamente à origem exibida pelo Vite, incluindo a porta.
+
+**Frontend não consegue acessar a API**
+
+Verifique se o backend está em execução e se `VITE_API_URL` aponta para o endereço correto.
+
+**Erro de autenticação**
+
+Confira as credenciais digitadas. A senha diferencia letras maiúsculas de minúsculas.
 
 ## Dados de demonstração
 

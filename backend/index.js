@@ -1,19 +1,23 @@
+import "dotenv/config";
 import express from "express";
 import cors from "cors";
-import router from './routes/index.js';
+import router from "./routes/index.js";
 
 const app = express();
 
+const PORT = Number(process.env.PORT || 3000);
+const FRONTEND_URL = process.env.FRONTEND_URL || "http://localhost:5173";
+
 app.use(cors({
-    origin: 'http://localhost:5173'
+    origin: FRONTEND_URL
 }));
 
 app.use(express.json());
 
-app.use('/', router);
+app.use("/", router);
 
-app.listen(3000, () => {
-    console.log('Serviço rodando na porta 3000');
+app.listen(PORT, () => {
+    console.log(`Serviço rodando na porta ${PORT}`);
 });
 
 
