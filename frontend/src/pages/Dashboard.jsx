@@ -1,7 +1,11 @@
-
 import { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { requisicaoAPI } from '../services/api';
+
+import FormularioVeiculo from '../components/FormularioVeiculo';
+import ListaVeiculos from '../components/ListaVeiculos';
+import FormularioLocacao from '../components/FormularioLocacao';
+import HistoricoLocacoes from '../components/HistoricoLocacoes';
 
 function obterDataHoraLocal() {
     const agora = new Date();
@@ -23,11 +27,22 @@ function formatarData(data) {
     return new Date(data).toLocaleString('pt-BR');
 }
 
+function obterUsuarioLogado() {
+    try {
+        return JSON.parse(localStorage.getItem('usuario')) || {};
+    } catch {
+        return {};
+    }
+}
+
 function Dashboard() {
     const navigate = useNavigate();
 
+    const [usuario] = useState(obterUsuarioLogado);
     const [veiculos, setVeiculos] = useState([]);
     const [locacoes, setLocacoes] = useState([]);
+
+    const [filtro, setFiltro] = useState('todos');
 
     const [carregandoVeiculos, setCarregandoVeiculos] = useState(true);
     const [carregandoLocacoes, setCarregandoLocacoes] = useState(true);
@@ -35,14 +50,16 @@ function Dashboard() {
     const [erroVeiculos, setErroVeiculos] = useState('');
     const [erroLocacoes, setErroLocacoes] = useState('');
 
-    const [formulario, setFormulario] = useState({
+    const [formularioLocacao, setFormularioLocacao] = useState({
         veiculoId: '',
         dataInicio: obterDataHoraLocal(),
         dataPrevistaDevolucao: ''
     });
 
-    const [enviando, setEnviando] = useState(false);
+    const [enviandoLocacao, setEnviandoLocacao] = useState(false);
+    const [enviandoVeiculo, setEnviandoVeiculo] = useState(false);
     const [finalizandoId, setFinalizandoId] = useState(null);
+
     const [mensagemAcao, setMensagemAcao] = useState('');
     const [tipoMensagem, setTipoMensagem] = useState('');
 
@@ -54,7 +71,7 @@ function Dashboard() {
         setErroLocacoes('');
 
         try {
-            const dadosVeiculos = await requisicaoAPI('/veiculos/disponiveis');
+            const dadosVeiculos = await requisicaoAPI('/veiculos');
             setVeiculos(dadosVeiculos);
         } catch (erro) {
             setErroVeiculos(erro.message);
@@ -75,18 +92,65 @@ function Dashboard() {
     useEffect(() => {
         const iniciarCarregamento = async () => {
             await carregarDados();
-        }
-
-        iniciarCarregamento();
+        };        
+        void iniciarCarregamento();
     }, [carregarDados]);
 
-    function atualizarCampo(evento) {
+    const veiculosFiltrados = veiculos.filter((veiculo) => {
+        if (filtro === 'disponiveis') {
+            return veiculo.disponivel;
+        }
+
+        return true;
+    });
+
+    const veiculosDisponiveis = veiculos.filter(
+        (veiculo) => veiculo.disponivel
+    );
+
+    function atualizarCampoLocacao(evento) {
         const { name, value } = evento.target;
 
-        setFormulario((atual) => ({
+        setFormularioLocacao((atual) => ({
             ...atual,
             [name]: value
         }));
+    }
+
+    async function cadastrarVeiculo(formulario) {
+        setMensagemAcao('');
+        setTipoMensagem('');
+
+        setEnviandoVeiculo(true);
+
+        try {
+            const dados = await requisicaoAPI('/veiculos', {
+                method: 'POST',
+                body: JSON.stringify({
+                    marca: formulario.marca,
+                    modelo: formulario.modelo,
+                    placa: formulario.placa,
+                    ano: Number(formulario.ano),
+                    valorDiaria: Number(formulario.valorDiaria)
+                })
+            });
+
+            setMensagemAcao(
+                dados.mensagem || 'Veículo cadastrado com sucesso!'
+            );
+            setTipoMensagem('sucesso');
+
+            await carregarDados();
+
+            return true;
+        } catch (erro) {
+            setMensagemAcao(erro.message);
+            setTipoMensagem('erro');
+
+            return false;
+        } finally {
+            setEnviandoVeiculo(false);
+        }
     }
 
     async function registrarLocacao(evento) {
@@ -96,17 +160,19 @@ function Dashboard() {
         setTipoMensagem('');
 
         if (
-            !formulario.veiculoId ||
-            !formulario.dataInicio ||
-            !formulario.dataPrevistaDevolucao
+            !formularioLocacao.veiculoId ||
+            !formularioLocacao.dataInicio ||
+            !formularioLocacao.dataPrevistaDevolucao
         ) {
             setMensagemAcao('Preencha todos os campos da locação.');
             setTipoMensagem('erro');
             return;
         }
 
-        const inicio = new Date(formulario.dataInicio);
-        const devolucao = new Date(formulario.dataPrevistaDevolucao);
+        const inicio = new Date(formularioLocacao.dataInicio);
+        const devolucao = new Date(
+            formularioLocacao.dataPrevistaDevolucao
+        );
 
         if (
             Number.isNaN(inicio.getTime()) ||
@@ -120,22 +186,22 @@ function Dashboard() {
             return;
         }
 
-        setEnviando(true);
+        setEnviandoLocacao(true);
 
         try {
             const dados = await requisicaoAPI('/locacoes', {
                 method: 'POST',
                 body: JSON.stringify({
-                    veiculoId: Number(formulario.veiculoId),
+                    veiculoId: Number(formularioLocacao.veiculoId),
                     dataInicio: inicio.toISOString(),
                     dataPrevistaDevolucao: devolucao.toISOString()
                 })
             });
 
-            setMensagemAcao(dados.mensagem);
+            setMensagemAcao(dados.mensagem || 'Locação registrada com sucesso!');
             setTipoMensagem('sucesso');
 
-            setFormulario({
+            setFormularioLocacao({
                 veiculoId: '',
                 dataInicio: obterDataHoraLocal(),
                 dataPrevistaDevolucao: ''
@@ -146,7 +212,7 @@ function Dashboard() {
             setMensagemAcao(erro.message);
             setTipoMensagem('erro');
         } finally {
-            setEnviando(false);
+            setEnviandoLocacao(false);
         }
     }
 
@@ -163,14 +229,14 @@ function Dashboard() {
                 }
             );
 
-            setMensagemAcao(dados.mensagem);
+            setMensagemAcao(dados.mensagem || 'Locação finalizada com sucesso!');
             setTipoMensagem('sucesso');
 
             setLocacoes((atuais) =>
                 atuais.map((locacao) =>
                     locacao.id === dados.locacao.id
-                    ? dados.locacao
-                    : locacao
+                        ? dados.locacao
+                        : locacao
                 )
             );
 
@@ -193,7 +259,12 @@ function Dashboard() {
     return (
         <main className="dashboard">
             <header className="dashboard-header">
-                <h1>Locadora de Veículos</h1>
+                <div>
+                    <h1>Locadora de Veículos</h1>
+                    <p className="usuario-logado">
+                        Usuário: {usuario.nome || usuario.email || 'Autenticado'}
+                    </p>
+                </div>
 
                 <button type="button" onClick={sair}>
                     Sair
@@ -204,7 +275,7 @@ function Dashboard() {
                 <h2>Bem-vindo ao sistema!</h2>
 
                 <p>
-                    Consulte os veículos disponíveis e acompanhe suas locações.
+                    Consulte os veículos, realize locações e acompanhe seu histórico.
                 </p>
 
                 {mensagemAcao && (
@@ -217,150 +288,44 @@ function Dashboard() {
                 )}
 
                 <section className="dashboard-section">
-                    <h2>Alugar veículo</h2>
+                    <h2>Cadastrar veículo</h2>
 
-                    {carregandoVeiculos && <p>Carregando veículos...</p>}
-
-                    {erroVeiculos && (
-                        <p className="erro" role="alert">{erroVeiculos}</p>
-                    )}
-
-                    {!carregandoVeiculos && !erroVeiculos && veiculos.length === 0 && (
-                        <p>Não existem veículos disponíveis para locação.</p>
-                    )}
-
-                    {!carregandoVeiculos && veiculos.length > 0 && (
-                        <form onSubmit={registrarLocacao} className="dashboard-card">
-                            <div>
-                                <label htmlFor="veiculoId">Escolha o veículo:</label>
-
-                                <select
-                                    id="veiculoId"
-                                    name="veiculoId"
-                                    value={formulario.veiculoId}
-                                    onChange={atualizarCampo}
-                                    required
-                                >
-                                    <option value="">Selecione um veículo</option>
-
-                                    {veiculos.map((veiculo) => (
-                                        <option key={veiculo.id} value={veiculo.id}>
-                                            {veiculo.marca} {veiculo.modelo} - {veiculo.placa}
-                                        </option>
-                                    ))}
-                                </select>
-                            </div>
-
-                            <div>
-                                <label htmlFor="dataInicio">Data e hora de início:</label>
-
-                                <input
-                                    type="datetime-local"
-                                    id="dataInicio"
-                                    name="dataInicio"
-                                    value={formulario.dataInicio}
-                                    min={obterDataHoraLocal()}
-                                    onChange={atualizarCampo}
-                                    required
-                                />
-                            </div>
-
-                            <div>
-                                <label htmlFor="dataPrevistaDevolucao">
-                                    Data e hora da devolução prevista:
-                                </label>
-
-                                <input
-                                    type="datetime-local"
-                                    id="dataPrevistaDevolucao"
-                                    name="dataPrevistaDevolucao"
-                                    value={formulario.dataPrevistaDevolucao}
-                                    min={formulario.dataInicio || obterDataHoraLocal()}
-                                    onChange={atualizarCampo}
-                                    required
-                                />
-                            </div>
-
-                            <button type="submit" disabled={enviando}>
-                                {enviando ? 'Registrando...' : 'Confirmar locação'}
-                            </button>
-                        </form>
-                    )}
+                    <FormularioVeiculo
+                        onCadastrar={cadastrarVeiculo}
+                        enviando={enviandoVeiculo}
+                    />
                 </section>
 
-                <section className="dashboard-section">
-                    <h2>Veículos disponíveis</h2>
+                <ListaVeiculos
+                    veiculos={veiculosFiltrados}
+                    filtro={filtro}
+                    onAlterarFiltro={setFiltro}
+                    carregando={carregandoVeiculos}
+                    erro={erroVeiculos}
+                    formatarMoeda={formatarMoeda}
+                />
 
-                    {carregandoVeiculos && <p>Carregando veículos...</p>}
+                <FormularioLocacao
+                    veiculos={veiculosDisponiveis}
+                    formulario={formularioLocacao}
+                    atualizarCampo={atualizarCampoLocacao}
+                    registrarLocacao={registrarLocacao}
+                    enviando={enviandoLocacao}
+                    obterDataHoraLocal={obterDataHoraLocal}
+                />
 
-                    {!carregandoVeiculos && !erroVeiculos && veiculos.length === 0 && (
-                        <p>Nenhum veículo disponível no momento.</p>
-                    )}
-
-                    <div className="dashboard-grid">
-                        {veiculos.map((veiculo) => (
-                            <article className="dashboard-card" key={veiculo.id}>
-                                <h3>{veiculo.marca} {veiculo.modelo}</h3>
-                                <p>Placa: {veiculo.placa}</p>
-                                <p>Ano: {veiculo.ano}</p>
-                                <p>Diária: {formatarMoeda(veiculo.valorDiaria)}</p>
-                            </article>
-                        ))}
-                    </div>
-                </section>
-
-                <section className="dashboard-section">
-                    <h2>Minhas locações</h2>
-
-                    {carregandoLocacoes && <p>Carregando locações...</p>}
-
-                    {erroLocacoes && (
-                        <p className="erro" role="alert">{erroLocacoes}</p>
-                    )}
-
-                    {!carregandoLocacoes && !erroLocacoes && locacoes.length === 0 && (
-                        <p>Você ainda não possui locações.</p>
-                    )}
-
-                    <div className="dashboard-grid">
-                        {locacoes.map((locacao) => (
-                            <article className="dashboard-card" key={locacao.id}>
-                                <h3>
-                                    {locacao.veiculo.marca} {locacao.veiculo.modelo}
-                                </h3>
-
-                                <p>Placa: {locacao.veiculo.placa}</p>
-                                <p>Início: {formatarData(locacao.dataInicio)}</p>
-
-                                <p>
-                                    Devolução prevista:{' '}
-                                    {formatarData(locacao.dataPrevistaDevolucao)}
-                                </p>
-
-                                <p>Valor total: {formatarMoeda(locacao.valorTotal)}</p>
-                                <p>Status: {locacao.status}</p>
-
-                                {locacao.status === 'ATIVA' && (
-                                    <button
-                                        type="button"
-                                        disabled={finalizandoId === locacao.id}
-                                        onClick={() => finalizarLocacao(locacao.id)}
-                                    >
-                                        {finalizandoId === locacao.id
-                                            ? 'Finalizando...'
-                                            : 'Finalizar locação'}
-                                    </button>
-                                )}
-                            </article>
-                        ))}
-                    </div>
-                </section>
+                <HistoricoLocacoes
+                    locacoes={locacoes}
+                    carregando={carregandoLocacoes}
+                    erro={erroLocacoes}
+                    finalizandoId={finalizandoId}
+                    finalizarLocacao={finalizarLocacao}
+                    formatarMoeda={formatarMoeda}
+                    formatarData={formatarData}
+                />
             </section>
         </main>
     );
 }
 
 export default Dashboard;
-
-
-
